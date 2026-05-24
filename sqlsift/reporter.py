@@ -24,8 +24,23 @@ def _colorize(text: str, color: str, use_color: bool) -> str:
     return f"{color}{text}{ANSI_RESET}"
 
 
+def _append_section(lines: list, title: str, items: list) -> None:
+    """Append a titled section to lines only if items is non-empty."""
+    if items:
+        lines.append(title)
+        lines.extend(items)
+
+
 def generate_report(diff: SchemaDiff, options: Optional[ReportOptions] = None) -> str:
-    """Generate a human-readable report from a SchemaDiff."""
+    """Generate a human-readable report from a SchemaDiff.
+
+    Args:
+        diff: The SchemaDiff object describing changes between two schemas.
+        options: Optional ReportOptions controlling formatting and color output.
+
+    Returns:
+        A formatted string summarizing added, removed, and modified tables.
+    """
     if options is None:
         options = ReportOptions()
 
@@ -36,15 +51,17 @@ def generate_report(diff: SchemaDiff, options: Optional[ReportOptions] = None) -
         lines.append("No schema changes detected.")
         return "\n".join(lines)
 
-    if diff.added_tables:
-        lines.append("Added tables:")
-        for table_name in sorted(diff.added_tables):
-            lines.append(f"{indent}" + _colorize(f"+ {table_name}", ANSI_GREEN, options.use_color))
+    added_lines = [
+        f"{indent}" + _colorize(f"+ {table_name}", ANSI_GREEN, options.use_color)
+        for table_name in sorted(diff.added_tables)
+    ]
+    _append_section(lines, "Added tables:", added_lines)
 
-    if diff.removed_tables:
-        lines.append("Removed tables:")
-        for table_name in sorted(diff.removed_tables):
-            lines.append(f"{indent}" + _colorize(f"- {table_name}", ANSI_RED, options.use_color))
+    removed_lines = [
+        f"{indent}" + _colorize(f"- {table_name}", ANSI_RED, options.use_color)
+        for table_name in sorted(diff.removed_tables)
+    ]
+    _append_section(lines, "Removed tables:", removed_lines)
 
     if diff.modified_tables:
         lines.append("Modified tables:")
