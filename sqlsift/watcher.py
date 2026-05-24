@@ -18,6 +18,7 @@ class WatchOptions:
     max_iterations: Optional[int] = None  # None => run forever
     on_drift: Optional[Callable[[SchemaDiff], None]] = None
     on_no_change: Optional[Callable[[], None]] = None
+    on_error: Optional[Callable[[Exception], None]] = None
 
 
 @dataclass
@@ -38,6 +39,10 @@ def _default_on_drift(diff: SchemaDiff) -> None:  # pragma: no cover
     print(f"[sqlsift watcher] Drift detected: {summary}")
 
 
+def _default_on_error(exc: Exception) -> None:  # pragma: no cover
+    print(f"[sqlsift watcher] Error loading schema: {exc}")
+
+
 def watch(
     loader: Callable[[], Schema],
     options: Optional[WatchOptions] = None,
@@ -47,19 +52,33 @@ def watch(
     Returns the list of :class:`WatchEvent` objects collected during the run.
     Intended for use in long-running processes; set ``options.max_iterations``
     to limit execution in tests or one-shot scripts.
+
+    If *loader* raises an exception during a poll, ``options.on_error`` is
+    called (defaulting to a stderr print) and the iteration is skipped without
+    updating the previous snapshot.
     """
     if options is None:
         options = WatchOptions()
 
     on_drift = options.on_drift or _default_on_drift
     on_no_change = options.on_no_change
+    on_error = options.on_error or _default_on_error
 
     previous: Optional[Schema] = None
     events: List[WatchEvent] = []
     iteration = 0
 
     while True:
-        current = loader()
+        try:
+            current = loader()
+        except Exception as exc:  # noqa: BLE001
+            on_error(exc)
+            iteration += 1
+            if options.max_iterations is not None and iteration >= options.max_iterations:
+                break
+            time.sleep(options.interval)
+            continue
+
         if previous is not None:
             diff = compute_diff(previous, current)
             had_drift = diff.has_changes()
